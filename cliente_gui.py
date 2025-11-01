@@ -1,205 +1,242 @@
-import socket
+# cliente_gui.py (Versão 6.1 - IP antes do login + aviso de usuário inexistente)
 import tkinter as tk
-from tkinter import simpledialog, messagebox, Listbox, END
+from tkinter import messagebox, simpledialog, scrolledtext
+import socket
+import threading
+import json
+import time
 
-# --- Configuração do Cliente de Rede ---
-# (Esta classe NetworkClient não muda em nada, por isso
-#  pode ser omitida para brevidade, mas está aqui para o ficheiro completo)
-class NetworkClient:
+PORT = 5050
+BUFFER_SIZE = 2048
+
+class ShareListApp(tk.Tk):
     def __init__(self):
+        super().__init__()
+        self.title("ShareList Client v6.1")
+        self.geometry("500x550")
         self.client_socket = None
+        self.username = None
+        self.current_list = None
+        self.stop_updater = False
+        self.server_ip = None
 
-    def connect(self, host, port):
+        # começa na tela de IP
+        self.create_ip_screen()
+
+    # ------------------ TELA DE IP ------------------
+    def create_ip_screen(self):
+        self.clear_window()
+        tk.Label(self, text="Conectar ao Servidor", font=("Helvetica", 18, "bold")).pack(pady=30)
+        tk.Label(self, text="Digite o IP do servidor:").pack(pady=10)
+        self.entry_ip = tk.Entry(self, width=30)
+        self.entry_ip.pack(pady=5)
+        tk.Button(self, text="Conectar", bg="#4CAF50", fg="white", width=20, command=self.connect_to_server).pack(pady=15)
+
+    def connect_to_server(self):
+        ip = self.entry_ip.get()
+        if not ip:
+            messagebox.showwarning("Campo vazio", "Digite o IP do servidor.")
+            return
         try:
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.connect((host, port))
-            welcome_msg = self.client_socket.recv(1024).decode()
-            return welcome_msg
-        except socket.error as e:
-            messagebox.showerror("Erro de Rede", f"Não foi possível ligar ao servidor: {e}")
-            return None
+            self.client_socket.connect((ip, PORT))
+            self.server_ip = ip
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível conectar: {e}")
+            return
 
-    def send_command(self, command):
+        self.create_login_screen()
+        threading.Thread(target=self.listen_server, daemon=True).start()
+
+    # ------------------ LOGIN ------------------
+    def create_login_screen(self):
+        self.clear_window()
+        tk.Label(self, text="ShareList - Login", font=("Helvetica", 18, "bold")).pack(pady=20)
+
+        tk.Label(self, text="Usuário:").pack()
+        self.entry_user = tk.Entry(self, width=30)
+        self.entry_user.pack(pady=5)
+
+        tk.Label(self, text="Senha:").pack()
+        self.entry_pass = tk.Entry(self, show="*", width=30)
+        self.entry_pass.pack(pady=5)
+
+        tk.Button(self, text="Entrar", bg="#4CAF50", fg="white", width=20, command=self.login_user).pack(pady=10)
+        tk.Button(self, text="Registrar", width=20, command=self.register_user).pack(pady=5)
+        tk.Button(self, text="< Voltar", width=20, command=self.create_ip_screen).pack(pady=10)
+
+    def login_user(self):
+        self.username = self.entry_user.get().strip()
+        password = self.entry_pass.get().strip()
+
+        if not self.username or not password:
+            messagebox.showwarning("Campos Vazios", "Preencha usuário e senha.")
+            return
+
+        self.send_command(f"LOGIN {self.username} {password}")
+
+    def register_user(self):
+        self.username = self.entry_user.get().strip()
+        password = self.entry_pass.get().strip()
+
+        if not self.username or not password:
+            messagebox.showwarning("Campos Vazios", "Preencha usuário e senha.")
+            return
+
+        self.send_command(f"REGISTER {self.username} {password}")
+
+    # ------------------ LOBBY ------------------
+    def show_lobby(self):
+        self.clear_window()
+        tk.Label(self, text=f"Bem-vindo, {self.username}!", font=("Helvetica", 14)).pack(pady=10)
+        tk.Button(self, text="Ver Minhas Listas", width=30, command=lambda: self.send_command("VER")).pack(pady=5)
+        tk.Button(self, text="Criar Nova Lista", width=30, command=self.create_list).pack(pady=5)
+        tk.Button(self, text="Entrar em Lista (por Código)", width=30, command=self.join_list).pack(pady=5)
+        tk.Button(self, text="Sair", width=30, command=self.on_close).pack(pady=10)
+
+        self.text_box = scrolledtext.ScrolledText(self, height=15, state="disabled")
+        self.text_box.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def create_list(self):
+        titulo = simpledialog.askstring("Nova Lista", "Digite o título da lista:")
+        if titulo:
+            self.send_command(f"CRIAR {titulo}")
+
+    def join_list(self):
+        codigo = simpledialog.askstring("Entrar na Lista", "Digite o código da lista:")
+        if codigo:
+            self.send_command(f"ENTRAR {codigo.upper()}")
+
+    # ------------------ MODO LISTA ------------------
+    def show_list_screen(self, titulo):
+        self.clear_window()
+        self.current_list = titulo
+        tk.Label(self, text=f"📋 {titulo}", font=("Helvetica", 16, "bold")).pack(pady=10)
+
+        add_frame = tk.Frame(self)
+        add_frame.pack(fill="x", padx=10, pady=5)
+
+        self.entry_task = tk.Entry(add_frame, width=40)
+        self.entry_task.pack(side="left", fill="x", expand=True, ipady=4)
+        self.entry_task.bind("<Return>", self.add_task)
+
+        tk.Button(add_frame, text="ADD", bg="#4CAF50", fg="white", command=self.add_task).pack(side="right", padx=5)
+
+        self.list_frame = tk.Frame(self)
+        self.list_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+        tk.Button(self, text="< Voltar", command=lambda: self.send_command("VOLTAR")).pack(pady=10)
+
+        self.stop_updater = False
+        threading.Thread(target=self.auto_update_list, daemon=True).start()
+
+    def add_task(self, event=None):
+        desc = self.entry_task.get()
+        if desc:
+            self.send_command(f"ADD {desc}")
+            self.entry_task.delete(0, tk.END)
+
+    def update_list(self, tasks):
+        for widget in self.list_frame.winfo_children():
+            widget.destroy()
+
+        for i, t in enumerate(tasks, 1):
+            row = tk.Frame(self.list_frame)
+            tk.Checkbutton(row, variable=tk.BooleanVar(value=t["done"]),
+                           command=lambda idx=i: self.send_command(f"DONE {idx}")).pack(side="left")
+            tk.Label(row, text=t["desc"], anchor="w").pack(side="left", fill="x", expand=True, padx=5)
+            tk.Button(row, text="🗑", command=lambda idx=i: self.send_command(f"DEL {idx}"),
+                      bg="#f44336", fg="white", width=2).pack(side="right", padx=5)
+            row.pack(fill="x", pady=2)
+
+    def auto_update_list(self):
+        while not self.stop_updater:
+            try:
+                self.send_command("LIST")
+                time.sleep(2.5)
+            except:
+                break
+
+    # ------------------ REDE ------------------
+    def send_command(self, cmd):
         try:
-            self.client_socket.sendall(command.encode())
-            
-            if command.upper() == "SAIR":
+            self.client_socket.sendall(cmd.encode())
+        except:
+            pass
+
+    def listen_server(self):
+        while True:
+            try:
+                data = self.client_socket.recv(BUFFER_SIZE)
+                if not data:
+                    break
+
+                msg = data.decode().strip()
+                print("[DEBUG]", msg)
+
+                # ---- Respostas do servidor ----
+                if msg.startswith("LOGIN_OK"):
+                    self.after(0, self.show_lobby)
+
+                elif msg.startswith("LOGIN_FAIL"):
+                    self.after(0, lambda: messagebox.showerror("Erro", "Usuário não registrado ou senha incorreta"))
+
+                elif msg.startswith("REGISTER_OK"):
+                    self.after(0, lambda: messagebox.showinfo("Sucesso", "Usuário registrado! Faça login."))
+
+                elif msg.startswith("REGISTER_FAIL"):
+                    self.after(0, lambda: messagebox.showerror("Erro", "Usuário já existe."))
+
+                elif msg.startswith("VER_R"):
+                    payload = msg.split(" ", 1)[1]
+                    self.after(0, self.show_server_message, payload)
+
+                elif msg.startswith("CRIAR_R") or msg.startswith("ENTRAR_R"):
+                    payload = msg.split(" ", 1)[1]
+                    self.after(0, self.show_server_message, payload)
+
+                elif msg.startswith("MODO_LISTA"):
+                    titulo = msg.split(" ", 1)[1]
+                    self.after(0, self.show_list_screen, titulo)
+
+                elif msg.startswith("LIST_R"):
+                    try:
+                        tasks = json.loads(msg.split(" ", 1)[1])
+                        self.after(0, self.update_list, tasks)
+                    except Exception as e:
+                        print("Erro JSON:", e)
+
+                elif msg.startswith("MODO_LOBBY"):
+                    self.stop_updater = True
+                    self.after(0, self.show_lobby)
+
+            except Exception as e:
+                print("Erro de conexão:", e)
+                break
+
+    # ------------------ INTERFACE ------------------
+    def show_server_message(self, msg):
+        self.text_box.config(state="normal")
+        self.text_box.delete("1.0", tk.END)
+        self.text_box.insert(tk.END, msg + "\n")
+        self.text_box.config(state="disabled")
+
+    def clear_window(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+
+    def on_close(self):
+        self.stop_updater = True
+        try:
+            if self.client_socket:
+                self.client_socket.sendall("SAIR".encode())
                 self.client_socket.close()
-                return "Ligação fechada."
-
-            resposta = self.client_socket.recv(4096).decode()
-            
-            if not resposta:
-                messagebox.showerror("Erro de Rede", "O servidor desligou a ligação.")
-                return None
-            
-            return resposta.strip()
-
-        except socket.error as e:
-            messagebox.showerror("Erro de Rede", f"Ligação perdida: {e}")
-            return None
-            
-    def close(self):
-        if self.client_socket:
-            self.send_command("SAIR")
+        except:
+            pass
+        self.destroy()
 
 
-# --- Configuração da Interface Gráfica (GUI) ---
-class App:
-    def __init__(self, root):
-        self.network = NetworkClient()
-        self.root = root
-        self.root.title("ShareList - Cliente")
-        self.root.geometry("500x400")
-        
-        self.is_running = True # <-- NOVO: Flag para controlar o auto-update
-
-        # Rótulo de status no fundo
-        self.status_label = tk.Label(root, text="Por favor, ligue-se ao servidor.", bd=1, relief=tk.SUNKEN, anchor=tk.W)
-        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
-
-        # Frame principal
-        main_frame = tk.Frame(root)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        # --- Frame da Lista (Esquerda) ---
-        list_frame = tk.Frame(main_frame)
-        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        tk.Label(list_frame, text="Tarefas:").pack(anchor=tk.W)
-        
-        scrollbar = tk.Scrollbar(list_frame, orient=tk.VERTICAL)
-        self.task_listbox = Listbox(list_frame, yscrollcommand=scrollbar.set, height=15)
-        scrollbar.config(command=self.task_listbox.yview)
-        
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.task_listbox.pack(fill=tk.BOTH, expand=True)
-
-        # --- Frame dos Botões (Direita) ---
-        button_frame = tk.Frame(main_frame)
-        button_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
-
-        tk.Button(button_frame, text="Atualizar Lista", command=self.atualizar_lista).pack(fill=tk.X)
-        tk.Button(button_frame, text="Concluir Tarefa", command=self.concluir_tarefa).pack(fill=tk.X, pady=5)
-        tk.Button(button_frame, text="Remover Tarefa", command=self.remover_tarefa, bg="#FF5733", fg="white").pack(fill=tk.X)
-
-        # --- Frame de Adicionar (Fundo) ---
-        add_frame = tk.Frame(root, pady=10)
-        add_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
-        tk.Label(add_frame, text="Nova Tarefa:").pack(side=tk.LEFT, padx=(10, 0))
-        self.new_task_entry = tk.Entry(add_frame)
-        self.new_task_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        # --- (MELHORIA 1: Ligar o "Enter") ---
-        self.new_task_entry.bind("<Return>", self.adicionar_tarefa_event) # <-- NOVO
-        
-        tk.Button(add_frame, text="Adicionar", command=self.adicionar_tarefa).pack(side=tk.RIGHT, padx=(0, 10))
-
-        # Regista o fecho da janela
-        self.root.protocol("WM_DELETE_WINDOW", self.ao_fechar)
-        
-        # Inicia a ligação
-        self.ligar_ao_servidor()
-
-    def ligar_ao_servidor(self):
-        host = simpledialog.askstring("Ligar ao Servidor", "Digite o IP do servidor:", initialvalue="127.0.0.1")
-        if not host:
-            self.root.destroy()
-            return
-
-        welcome_msg = self.network.connect(host, 5050)
-        
-        if welcome_msg:
-            self.status_label.config(text="Ligado a " + host)
-            # --- (MELHORIA 2: Iniciar o auto-update) ---
-            self.auto_atualizar_loop() # <-- NOVO
-        else:
-            self.root.destroy()
-
-    # --- (MELHORIA 2: Nova função de auto-update) ---
-    def auto_atualizar_loop(self):
-        """Chama a si própria a cada 3 segundos para atualizar a lista."""
-        if not self.is_running:
-            return # Para de atualizar se a app for fechada
-
-        self.atualizar_lista()
-        
-        # Agenda esta função para ser chamada novamente em 3000ms (3 segundos)
-        self.root.after(3000, self.auto_atualizar_loop) # <-- NOVO
-
-    # --- Funções de Lógica ---
-    def atualizar_lista(self):
-        # Apanha o estado focado para o restaurar depois
-        tarefa_focada = self.task_listbox.curselection() # <-- NOVO
-        
-        resposta = self.network.send_command("LIST")
-        if resposta is None: return
-
-        self.task_listbox.delete(0, END)
-
-        if resposta != "Nenhuma tarefa.":
-            tarefas = resposta.split('\n')
-            for t in tarefas:
-                self.task_listbox.insert(END, t)
-        
-        # Restaura a seleção para não ser inconveniente
-        if tarefa_focada:
-            self.task_listbox.select_set(tarefa_focada) # <-- NOVO
-
-    # --- (MELHORIA 1: Função 'wrapper' para o Enter) ---
-    def adicionar_tarefa_event(self, event):
-        """Função chamada pelo 'bind' do Enter. O 'event' é ignorado."""
-        self.adicionar_tarefa() # <-- NOVO
-
-    def adicionar_tarefa(self):
-        # NOTA: No campo "Nova Tarefa", escreva *apenas* a tarefa (ex: "Comprar pão")
-        # Não escreva o comando "ADD"
-        tarefa = self.new_task_entry.get()
-        if not tarefa:
-            messagebox.showwarning("Aviso", "A tarefa não pode estar vazia.")
-            return
-        
-        resposta = self.network.send_command(f"ADD {tarefa}")
-        self.status_label.config(text=resposta)
-        self.new_task_entry.delete(0, END)
-        self.atualizar_lista() # Atualiza logo após adicionar
-
-    def _obter_numero_tarefa_selecionada(self):
-        try:
-            indice_selecionado = self.task_listbox.curselection()[0]
-            return indice_selecionado + 1
-        except IndexError:
-            messagebox.showwarning("Aviso", "Por favor, selecione uma tarefa na lista primeiro.")
-            return None
-
-    def concluir_tarefa(self):
-        num_tarefa = self._obter_numero_tarefa_selecionada()
-        if num_tarefa is None: return
-
-        resposta = self.network.send_command(f"DONE {num_tarefa}")
-        self.status_label.config(text=resposta)
-        self.atualizar_lista()
-
-    def remover_tarefa(self):
-        num_tarefa = self._obter_numero_tarefa_selecionada()
-        if num_tarefa is None: return
-        
-        if not messagebox.askyesno("Confirmar", "Tem a certeza que quer remover esta tarefa?"):
-            return
-
-        resposta = self.network.send_command(f"DEL {num_tarefa}")
-        self.status_label.config(text=resposta)
-        self.atualizar_lista()
-    
-    def ao_fechar(self):
-        """Função chamada quando o 'X' da janela é premido."""
-        self.is_running = False # <-- NOVO: Para o loop de auto-update
-        print("A fechar a ligação...")
-        self.network.close()
-        self.root.destroy()
-
-# --- Iniciar a Aplicação ---
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = App(root)
-    root.mainloop()
+    app = ShareListApp()
+    app.protocol("WM_DELETE_WINDOW", app.on_close)
+    app.mainloop()
