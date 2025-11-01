@@ -2,168 +2,256 @@ import socket
 import threading
 import json
 import os
+import random
+import string
 
-tasks = [] 
-lock = threading.Lock()
+#SERVER SEM IMPLEMENTAÇÃO GRAFICA (garante pelo menos um codigo funcional)
+
 HOST = "0.0.0.0"
 PORT = 5050
 USERS_FILE = "users.json"
+LISTAS_FILE = "listas.json"
+lock = threading.Lock() 
 
-def load_users():
-    if not os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "w") as f: json.dump({}, f)
-    with open(USERS_FILE, "r") as f:
-        return json.load(f)
 
-def save_users(users):
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f, indent=4)
+def load_data(filepath):
+    """Carrega um ficheiro JSON (users ou listas)."""
+    with lock:
+        if not os.path.exists(filepath):
+            with open(filepath, "w") as f:
+                json.dump({}, f)
+            return {}
+        try:
+            with open(filepath, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            print(f"*** ERRO: Ficheiro {filepath} corrompido! A criar um novo.")
+            with open(filepath, "w") as f:
+                json.dump({}, f)
+            return {}
 
-users = load_users()
+def save_data(filepath, data):
+    """Salva dados num ficheiro JSON."""
+    with lock:
+        with open(filepath, "w") as f:
+            json.dump(data, f, indent=4)
 
-def handle_client(conn, addr):
-    print(f"[NOVA CONEXAO] {addr} conectado.") 
-    conn.sendall("Bem-vindo à ShareList!\n".encode()) 
+def generate_code(length=4):
+    """Gera um código aleatório (ex: A8F3)."""
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
-    try:
-        while True:
-            logged_user = None
-            
-            while not logged_user:
-                conn.sendall("Digite LOGIN ou REGISTER: ".encode()) 
-                cmd_data = conn.recv(1024).decode().strip().upper()
-                if not cmd_data: continue 
 
-                if cmd_data == "LOGIN":
-                    conn.sendall("Usuário: ".encode()) 
-                    user = conn.recv(1024).decode().strip()
-                    if not user: continue 
-
-                    conn.sendall("Senha: ".encode()) 
-                    pwd = conn.recv(1024).decode().strip()
-                    if not pwd: continue 
-
-                    with lock:
-                        if user in users:
-                            if users[user] == pwd:
-                                logged_user = user
-                                conn.sendall(f"Login bem-sucedido! Bem-vindo, {user}.\n".encode())
-                                print(f"[{user}] fez login com sucesso.")
-                            else:
-                                conn.sendall("Senha incorreta.\n".encode())
-                        else:
-                            conn.sendall("Usuário não registrado.\n".encode())
-
-                elif cmd_data == "REGISTER":
-                    conn.sendall("Novo Usuário: ".encode())
-                    user = conn.recv(1024).decode().strip()
-                    if not user: continue 
-
-                    conn.sendall("Nova Senha: ".encode())
-                    pwd = conn.recv(1024).decode().strip()
-                    if not pwd: continue 
-
-                    with lock:
-                        if user in users:
-                            conn.sendall("Usuário já existe.\n".encode())
-                        else:
-                            users[user] = pwd
-                            save_users(users)
-                            logged_user = user 
-                            conn.sendall(f"Usuário {user} registrado com sucesso!\n".encode())
-                            print(f"[{user}] registrou uma nova conta.") 
-                else:
-                    conn.sendall("Comando inválido. Digite LOGIN ou REGISTER.\n".encode())
-            
-            while logged_user:
-                conn.sendall(f"({logged_user}) >> ".encode())
-                data = conn.recv(1024).decode().strip()
-                if not data:
-                    logged_user = None 
-                    break 
-                
-                cmd_upper = data.upper()
-                response = "" 
-
-                if cmd_upper == "SAIR":
-                    with lock:
-                        response = process_command(data, logged_user)
-                    conn.sendall(response.encode())
-                    return 
-
-                elif cmd_upper == "DELUSER":
-                    with lock:
-                        print(f"[{logged_user}] Solicitou a remoção da conta.")
-                        if logged_user in users:
-                            del users[logged_user]
-                            save_users(users)
-                            response = " Usuário removido. Voltando à tela de login.\n"
-                            print(f"[{logged_user}] Conta removida com sucesso.") 
-                        else:
-                            response = "ERRO: Não foi possível remover.\n"
-                    logged_user = None 
-
-                else:
-                    try:
-                        with lock:
-                            response = process_command(data, logged_user) 
-                    except Exception as e:
-                        print(f"*** ERRO NO SERVIDOR: {e} ***")
-                        response = "ERRO: Ocorreu um erro interno no servidor.\n"
-                
-                conn.sendall(response.encode())
-
-    except ConnectionResetError:
-        print(f"[{addr}] Ligação perdida abruptamente.")
-    except Exception as e:
-        print(f"[{addr}] Erro de rede: {e}")
-    finally:
-        conn.close()
-        user_log = logged_user if logged_user else str(addr)
-        print(f"[DESCONECTADO] [{user_log}]") 
-
-def process_command(msg, user):
+def process_list_command(msg, list_code, user):
+    """Processa comandos ADD, LIST, DONE, DEL para uma lista específica."""
+    
+    listas = load_data(LISTAS_FILE) 
+    
+    
+    if list_code not in listas:
+        return "ERRO: A lista em que estava foi apagada.\n"
+    
+    
+    current_tasks = listas[list_code]["tarefas"]
+    
     parts = msg.split(" ", 1)
     cmd = parts[0].upper()
+    response = "Comando desconhecido.\n"
 
     if cmd == "ADD" and len(parts) > 1:
         tarefa_desc = parts[1]
-        tasks.append({"desc": tarefa_desc, "done": False})
-        print(f"[{user}] Adicionou a tarefa: '{tarefa_desc}'") 
-        return "OK Tarefa adicionada\n"
-
+        current_tasks.append({"desc": tarefa_desc, "done": False})
+        print(f"[{user}] Adicionou '{tarefa_desc}' à lista '{list_code}'")
+        response = "OK Tarefa adicionada\n"
+        
     elif cmd == "LIST":
-        print(f"[{user}] Solicitou a lista de tarefas.")
-        if not tasks: return "Nenhuma tarefa.\n"
-        return "\n".join([f"{i+1} - {'[x]' if t['done'] else '[ ]'} {t['desc']}" for i, t in enumerate(tasks)]) + "\n"
+        print(f"[{user}] Solicitou a lista '{list_code}'")
+        if not current_tasks: 
+            response = "Nenhuma tarefa nesta lista.\n"
+        else:
+            response = "\n".join([f"{i+1} - {'[x]' if t['done'] else '[ ]'} {t['desc']}" for i, t in enumerate(current_tasks)]) + "\n"
 
     elif cmd == "DONE" and len(parts) > 1:
         try:
             i = int(parts[1]) - 1
-            tarefa_desc = tasks[i]['desc'] 
-            tasks[i]["done"] = True
-            print(f"[{user}] Concluiu a tarefa: '{tarefa_desc}'") 
-            return f"OK Tarefa {i+1} concluída\n"
+            current_tasks[i]["done"] = True
+            print(f"[{user}] Concluiu '{current_tasks[i]['desc']}' na lista '{list_code}'")
+            response = f"OK Tarefa {i+1} concluída\n"
         except (ValueError, IndexError): 
-            print(f"[{user}] Tentou concluir tarefa inválida: {parts[1]}") 
-            return "Erro: índice inválido.\n"
+            response = "Erro: índice inválido.\n"
 
     elif cmd == "DEL" and len(parts) > 1:
         try:
             i = int(parts[1]) - 1
-            tarefa_removida = tasks.pop(i)
-            print(f"[{user}] Removeu a tarefa: '{tarefa_removida['desc']}'") 
-            return f"OK Tarefa {i+1} removida\n"
+            tarefa_removida = current_tasks.pop(i)
+            print(f"[{user}] Removeu '{tarefa_removida['desc']}' da lista '{list_code}'")
+            response = f"OK Tarefa {i+1} removida\n"
         except (ValueError, IndexError): 
-            print(f"[{user}] Tentou remover tarefa inválida: {parts[1]}") 
-            return "Erro: índice inválido.\n"
+            response = "Erro: índice inválido.\n"
     
-    elif cmd == "SAIR": 
-        print(f"[{user}] Fez logout.")
-        return "Até logo!\n" 
+   
+    if cmd in ["ADD", "DONE", "DEL"]:
+        save_data(LISTAS_FILE, listas)
+        
+    return response
 
-    print(f"[{user}] Enviou comando desconhecido: '{msg}'") 
-    return "Comando desconhecido.\n" 
+
+def handle_client(conn, addr):
+    print(f"[NOVA CONEXAO] {addr} conectado.")
+    conn.sendall("Bem-vindo à ShareList v2.0!\n".encode()) 
+    logged_user = None
+
+    try:
+        
+        while not logged_user:
+            conn.sendall("Usuário: ".encode()) 
+            user = conn.recv(1024).decode().strip()
+            if not user: continue 
+
+            users = load_data(USERS_FILE)
+
+            if user in users:
+                conn.sendall("Senha: ".encode()) 
+                pwd = conn.recv(1024).decode().strip()
+                if not pwd: continue 
+
+                if users[user]["password"] == pwd:
+                    logged_user = user
+                    conn.sendall(f"✅ Login bem-sucedido! Bem-vindo, {user}.\n".encode())
+                    print(f"[{user}] fez login com sucesso.")
+                else:
+                    conn.sendall("❌ Senha incorreta.\n".encode())
+            else:
+                conn.sendall(f"❌ Usuário '{user}' não existe. Deseja registrar (S/N)? ".encode())
+                choice = conn.recv(1024).decode().strip().upper()
+
+                if choice == "S":
+                    conn.sendall("Nova Senha: ".encode())
+                    pwd = conn.recv(1024).decode().strip()
+                    if not pwd:
+                        conn.sendall("❌ Registo cancelado (senha vazia).\n".encode())
+                        continue 
+                    
+                    users[user] = {"password": pwd, "listas_acessiveis": []}
+                    save_data(USERS_FILE, users)
+                    logged_user = user 
+                    conn.sendall(f"✅ Usuário {user} registrado com sucesso!\n".encode())
+                    print(f"[{user}] registrou uma nova conta.")
+                else:
+                    conn.sendall("OK. Tente novamente.\n".encode())
+        
+        
+        menu_lobby = (
+            f"\n--- [LOBBY PRINCIPAL: {logged_user}] ---\n"
+            "1. Ver minhas listas\n"
+            "2. Criar uma nova lista\n"
+            "3. Entrar em uma lista (por código)\n"
+            "4. Sair (Logout)\n"
+            "--------------------------\n"
+            "Digite (1-4): " 
+        )
+        
+        while True: 
+            
+            conn.sendall(menu_lobby.encode())
+            
+            
+            choice = conn.recv(1024).decode().strip()
+            if not choice: break
+
+            
+            if choice == "1": 
+                users = load_data(USERS_FILE)
+                listas = load_data(LISTAS_FILE)
+                user_list_codes = users[logged_user]["listas_acessiveis"]
+                
+                if not user_list_codes:
+                    conn.sendall("Você não tem listas.\n".encode())
+                    continue 
+                
+                resposta = "Suas Listas:\n"
+                for i, code in enumerate(user_list_codes, 1):                    
+                    titulo = listas.get(code, {}).get("titulo", f"Lista {code} (Apagada)")
+                    resposta += f" {i}. {titulo} (Código: {code})\n"
+                conn.sendall(resposta.encode())
+
+            elif choice == "2": 
+                conn.sendall("Digite o título da nova lista: ".encode())
+                titulo = conn.recv(1024).decode().strip()
+
+                if not titulo:
+                    conn.sendall("❌ Criação cancelada (título vazio).\n".encode())
+                    continue
+
+                users = load_data(USERS_FILE)
+                listas = load_data(LISTAS_FILE)
+                
+                new_code = generate_code()
+                while new_code in listas: new_code = generate_code()
+                
+                listas[new_code] = {"titulo": titulo, "tarefas": []}
+                users[logged_user]["listas_acessiveis"].append(new_code)
+                
+                save_data(LISTAS_FILE, listas)
+                save_data(USERS_FILE, users)
+                
+                conn.sendall(f"✅ Lista '{titulo}' criada! O código de partilha é: {new_code}\n".encode())
+
+            elif choice == "3": 
+                conn.sendall("Digite o código da lista para entrar: ".encode())
+                code_to_join = conn.recv(1024).decode().strip().upper()
+
+                if not code_to_join:
+                    conn.sendall("❌ Entrada cancelada (código vazio).\n".encode())
+                    continue 
+
+                users = load_data(USERS_FILE)
+                listas = load_data(LISTAS_FILE)
+
+                if code_to_join not in listas:
+                    conn.sendall("❌ Código de lista inválido.\n".encode())
+                
+                elif code_to_join not in users[logged_user]["listas_acessiveis"]:
+                    
+                    users[logged_user]["listas_acessiveis"].append(code_to_join)
+                    save_data(USERS_FILE, users)
+                    titulo = listas[code_to_join]["titulo"]
+                    conn.sendall(f"✅ Você foi adicionado à lista: '{titulo}'. Use a opção 3 novamente para editá-la.\n".encode())
+                
+                else: 
+                    
+                    titulo_lista = listas[code_to_join]["titulo"]
+                    conn.sendall(f"✅ Entrando na lista '{titulo_lista}'... (Use VOLTAR para sair)\n".encode())
+                    
+                   
+                    while True:
+                        conn.sendall(f"({logged_user}) [{titulo_lista}] >> ".encode())
+                        list_data = conn.recv(1024).decode().strip()
+                        if not list_data:
+                            raise ConnectionResetError
+                        
+                        if list_data.upper() == "VOLTAR":
+                            conn.sendall("Saindo da lista...\n".encode())
+                            break 
+                        
+                        response = process_list_command(list_data, code_to_join, logged_user)
+                        conn.sendall(response.encode())
+                    
+
+            elif choice == "4":
+                print(f"👋 [{logged_user}] Fez logout.")
+                conn.sendall("Até logo!\n".encode())
+                return 
+            
+            else:
+                conn.sendall("Opção inválida. Por favor, digite um número de 1 a 4.\n".encode())
+                
+    except (ConnectionResetError, socket.error):
+        print(f"[{addr}] Ligação perdida.")
+    except Exception as e:
+        print(f"*** ERRO INESPERADO: {e} ***")
+    finally:
+        conn.close()
+        print(f"[DESCONECTADO] {addr}")
 
 def start():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -179,7 +267,7 @@ def start():
                 thread.start()
             except socket.timeout: pass 
     except KeyboardInterrupt:
-        print("\n[DESLIGANDO] Recebido Cancelamento. A desligar...") #quando vc aperta ctrl C
+        print("\n[DESLIGANDO] Recebido Ctrl+C. A desligar...")
     finally:
         server.close()
         print("[SERVIDOR DESLIGADO]")

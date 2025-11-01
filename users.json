@@ -1,5 +1,11 @@
 {
-    "Tarsila": "sales",
+    "Tarsila": "123",
     "Cao": "gato",
-    "gato": "cao"
+    "gato": "cao",
+    "tarsila": {
+        "password": "123",
+        "listas_acessiveis": [
+            "BO4Y"
+        ]
+    }
 }

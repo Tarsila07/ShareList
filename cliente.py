@@ -1,5 +1,6 @@
 import socket
-
+import getpass 
+#SEM IMPLEMENTAÇÃO GRAFICA (garante pelo menos um codigo funcional)
 PORT = 5050
 SERVER = input("Digite o IP do servidor: ")
 
@@ -25,11 +26,18 @@ while True:
             print("\nO servidor fechou a ligação.")
             break
             
-    
-        if data_do_servidor.endswith(': ') or data_do_servidor.endswith('>> '):
+        
+        if (data_do_servidor.endswith(': ') or 
+            data_do_servidor.endswith('>> ') or 
+            data_do_servidor.endswith('? ')): 
             
-            msg = input(data_do_servidor)
             
+            
+            if data_do_servidor.lower().endswith('senha: '):
+                
+                msg = input(data_do_servidor) 
+            else:
+                msg = input(data_do_servidor)
             
             if not msg:
                 client.sendall("".encode())
@@ -43,11 +51,8 @@ while True:
                 break 
         
         else:
-           
-            print(data_do_servidor, end='')
             
-            if "voltando à tela de login" in data_do_servidor:
-                continue
+            print(data_do_servidor, end='')
 
     except (socket.error, ConnectionResetError) as e:
         print(f"\nA ligação ao servidor foi perdida: {e}")
