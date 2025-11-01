@@ -104,21 +104,40 @@ def handle_client(conn, addr):
             buffer = ""
             parts = msg.split(" ")
             cmd = parts[0].upper()
+            
             if cmd == "LOGIN" and len(parts) >= 3:
-                # Realiza login do usuário
-                user, pwd = parts[1], parts[2]
+                # --- INÍCIO DA CORREÇÃO ---
+                # A senha é TUDO depois da segunda parte (índice 2 em diante)
+                user = parts[1]
+                pwd = " ".join(parts[2:]) # <-- CORREÇÃO: Junta o restante das partes
+                # --- FIM DA CORREÇÃO ---
+                
                 users = load_data(USERS_FILE)
+                
                 if user not in users:
                     conn.sendall("LOGIN_NOUSER\n".encode())
+                
+                # (Correção anterior) Verifica se o formato do usuário é válido
+                elif not isinstance(users.get(user), dict) or "password" not in users.get(user):
+                    print(f"[AVISO] Tentativa de login no usuário '{user}' com formato inválido no JSON.")
+                    conn.sendall("LOGIN_WRONGPASS\n".encode())
+                
+                # Agora sim, compara a senha COMPLETA
                 elif users[user]["password"] != pwd:
                     conn.sendall("LOGIN_WRONGPASS\n".encode())
+                
                 else:
                     logged_user = user
                     conn.sendall(f"LOGIN_OK {user}\n".encode())
                     print(f"{user} logado com sucesso.")
+            
             elif cmd == "REGISTER" and len(parts) >= 3:
                 # Registra um novo usuário
-                user, pwd = parts[1], parts[2]
+                # --- INÍCIO DA CORREÇÃO (Consistência) ---
+                user = parts[1]
+                pwd = " ".join(parts[2:]) # <-- CORREÇÃO: Permite senhas com espaço no registro
+                # --- FIM DA CORREÇÃO ---
+                
                 users = load_data(USERS_FILE)
                 if user in users:
                     conn.sendall("REGISTER_FAIL\n".encode())
