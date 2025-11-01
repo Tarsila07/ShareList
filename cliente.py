@@ -1,51 +1,56 @@
 import socket
 
-SERVER = input("Digite o IP do servidor: ")
 PORT = 5050
+SERVER = input("Digite o IP do servidor: ")
 
 try:
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((SERVER, PORT))
+    
+    
+    welcome_msg = client.recv(1024).decode()
+    print(welcome_msg, end='') 
+
 except socket.error as e:
     print(f"Erro ao conectar ao servidor {SERVER}:{PORT} - {e}")
     exit()
 
 
-try:
-    print(client.recv(1024).decode())
-except socket.error as e:
-    print(f"Erro ao receber boas-vindas: {e}")
-    client.close()
-    exit()
-
-
 while True:
-    msg = input(">> ")
-    
-    
-    if not msg:
-        continue
-
     try:
-       
-        client.sendall(msg.encode())
-
         
-        resposta = client.recv(1024).decode()
-
-        if not resposta:
-            print("O servidor desligou a ligação.")
+        data_do_servidor = client.recv(1024).decode()
+        
+        if not data_do_servidor:
+            print("\nO servidor fechou a ligação.")
             break
             
-        print(resposta, end='')  
-                               
-
+    
+        if data_do_servidor.endswith(': ') or data_do_servidor.endswith('>> '):
+            
+            msg = input(data_do_servidor)
+            
+            
+            if not msg:
+                client.sendall("".encode())
+                continue 
+            
+            client.sendall(msg.encode())
+            
+            if msg.upper() == "SAIR":
+                final_reply = client.recv(1024).decode()
+                print(final_reply, end='')
+                break 
         
-        if msg.upper() == "SAIR":
-            break 
+        else:
+           
+            print(data_do_servidor, end='')
+            
+            if "voltando à tela de login" in data_do_servidor:
+                continue
 
-    except socket.error as e:
-        print(f"A ligação ao servidor foi perdida: {e}")
+    except (socket.error, ConnectionResetError) as e:
+        print(f"\nA ligação ao servidor foi perdida: {e}")
         break
 
 client.close()
