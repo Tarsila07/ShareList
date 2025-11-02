@@ -1,4 +1,4 @@
-# servidor_gui.py (Versão 4.1 - Com JSON)
+# server-gui.py (Versão 4.3 - Com JSON)
 
 import socket
 import threading
@@ -55,26 +55,34 @@ def process_list_command(msg, list_code, user):
     parts = msg.split(" ", 1)
     cmd = parts[0].upper()
     response = "LIST_ERR Comando inválido.\n"
+
     if cmd == "LIST":
         # Retorna todas as tarefas da lista
         response = f"LIST_R {json.dumps(tasks)}\n"
+
     elif cmd == "ADD" and len(parts) > 1:
-        # Adiciona uma nova tarefa
+        # Adiciona uma nova tarefa com o nome do usuário
         desc = parts[1]
-        tasks.append({"desc": desc, "done": False})
+        tasks.append({"desc": f"{user} adicionou: {desc}", "done": False})
         save_data(LISTAS_FILE, listas)
         response = f"LIST_R {json.dumps(tasks)}\n"
+
     elif cmd in ("DONE", "UNDONE") and len(parts) > 1:
-        # Marca ou desmarca uma tarefa como concluída
         try:
             idx = int(parts[1]) - 1
-            tasks[idx]["done"] = (cmd == "DONE")
+            original_desc = tasks[idx]["desc"].split(": ", 1)[-1]  # Mantém apenas o texto original
+            if cmd == "DONE":
+                tasks[idx]["desc"] = f"{user} concluiu: {original_desc}"
+                tasks[idx]["done"] = True
+            else:
+                tasks[idx]["desc"] = f"{user} desmarcou: {original_desc}"
+                tasks[idx]["done"] = False
             save_data(LISTAS_FILE, listas)
             response = f"LIST_R {json.dumps(tasks)}\n"
         except (ValueError, IndexError):
             response = "LIST_ERR Índice inválido.\n"
+
     elif cmd == "DEL" and len(parts) > 1:
-        # Remove uma tarefa da lista
         try:
             idx = int(parts[1]) - 1
             tasks.pop(idx)
@@ -82,6 +90,7 @@ def process_list_command(msg, list_code, user):
             response = f"LIST_R {json.dumps(tasks)}\n"
         except (ValueError, IndexError):
             response = "LIST_ERR Índice inválido.\n"
+
     return response
 
 # Função que lida com cada cliente conectado
@@ -106,38 +115,25 @@ def handle_client(conn, addr):
             cmd = parts[0].upper()
             
             if cmd == "LOGIN" and len(parts) >= 3:
-                # --- INÍCIO DA CORREÇÃO ---
-                # A senha é TUDO depois da segunda parte (índice 2 em diante)
                 user = parts[1]
-                pwd = " ".join(parts[2:]) # <-- CORREÇÃO: Junta o restante das partes
-                # --- FIM DA CORREÇÃO ---
-                
+                pwd = " ".join(parts[2:])
                 users = load_data(USERS_FILE)
                 
                 if user not in users:
                     conn.sendall("LOGIN_NOUSER\n".encode())
-                
-                # (Correção anterior) Verifica se o formato do usuário é válido
                 elif not isinstance(users.get(user), dict) or "password" not in users.get(user):
                     print(f"[AVISO] Tentativa de login no usuário '{user}' com formato inválido no JSON.")
                     conn.sendall("LOGIN_WRONGPASS\n".encode())
-                
-                # Agora sim, compara a senha COMPLETA
                 elif users[user]["password"] != pwd:
                     conn.sendall("LOGIN_WRONGPASS\n".encode())
-                
                 else:
                     logged_user = user
                     conn.sendall(f"LOGIN_OK {user}\n".encode())
                     print(f"{user} logado com sucesso.")
             
             elif cmd == "REGISTER" and len(parts) >= 3:
-                # Registra um novo usuário
-                # --- INÍCIO DA CORREÇÃO (Consistência) ---
                 user = parts[1]
-                pwd = " ".join(parts[2:]) # <-- CORREÇÃO: Permite senhas com espaço no registro
-                # --- FIM DA CORREÇÃO ---
-                
+                pwd = " ".join(parts[2:])
                 users = load_data(USERS_FILE)
                 if user in users:
                     conn.sendall("REGISTER_FAIL\n".encode())
@@ -156,7 +152,6 @@ def handle_client(conn, addr):
             parts = msg.split(" ", 1)
             cmd = parts[0].upper()
             if cmd == "VER":
-                # Lista as listas acessíveis do usuário
                 users = load_data(USERS_FILE)
                 listas = load_data(LISTAS_FILE)
                 codes = users[logged_user]["listas_acessiveis"]
@@ -169,7 +164,6 @@ def handle_client(conn, addr):
                         resposta += f"{i}. {titulo} (Código: {c})\n"
                     conn.sendall(resposta.encode())
             elif cmd == "CRIAR" and len(parts) > 1:
-                # Cria uma nova lista e gera código de acesso
                 titulo = parts[1]
                 users = load_data(USERS_FILE)
                 listas = load_data(LISTAS_FILE)
@@ -182,7 +176,6 @@ def handle_client(conn, addr):
                 save_data(LISTAS_FILE, listas)
                 conn.sendall(f"CRIAR_R Lista '{titulo}' criada! Código: {code}\n".encode())
             elif cmd == "ENTRAR" and len(parts) > 1:
-                # Permite o usuário entrar em uma lista existente
                 code = parts[1].upper()
                 listas = load_data(LISTAS_FILE)
                 users = load_data(USERS_FILE)
@@ -198,11 +191,9 @@ def handle_client(conn, addr):
                         if msg.upper() == "VOLTAR":
                             conn.sendall("MODO_LOBBY Voltando...\n".encode())
                             break
-                        # Processa comandos da lista enquanto o usuário estiver dentro dela
                         response = process_list_command(msg, code, logged_user)
                         conn.sendall(response.encode())
             elif cmd == "SAIR":
-                # Finaliza a conexão com o cliente
                 conn.sendall("Até logo!\n".encode())
                 break
     except (ConnectionResetError, socket.error):
@@ -217,7 +208,6 @@ def start():
     server.listen()
     print(f"[SERVIDOR] Rodando em {HOST}:{PORT}")
     try:
-        # Aceita novas conexões continuamente
         while True:
             conn, addr = server.accept()
             threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
