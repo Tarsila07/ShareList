@@ -1,4 +1,4 @@
-# servidor.py (Versão 4.1 - Com JSON)
+# servidor_gui.py (Versão 4.1 - Com JSON)
 
 import socket
 import threading
