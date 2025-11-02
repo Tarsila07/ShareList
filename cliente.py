@@ -1,6 +1,6 @@
 import socket
 import getpass 
-#SEM IMPLEMENTAÇÃO GRAFICA (garante pelo menos um codigo funcional)
+#SEM IMPLEMENTAÇÃO GRAFICA
 PORT = 5050
 SERVER = input("Digite o IP do servidor: ")
 
