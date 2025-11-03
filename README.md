@@ -153,6 +153,7 @@ python cliente_gui.py #Com Interface
     </td>
   </tr>
 </table>
+
 ---
 
 ## 👩‍💻 Autores
@@ -182,6 +183,8 @@ python cliente_gui.py #Com Interface
     </td>
   </tr>
 </table>
+
+---
 
 ## 🧾 Licença
 
