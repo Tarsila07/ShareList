@@ -112,17 +112,78 @@ python cliente_gui.py #Com Interface
 
 ## 🎥 Demonstração em Vídeo
 
-### 📺 Link para o vídeo no YouTube
+### 📺 [Confira o vídeo](https://COLOQUE-SEU-LINK-AQUI)
 
-**O vídeo mostra:**
-
-* A execução do servidor e de dois clientes.
+* A **implementação** e o **funcionamento** do servidor.
+* A conexão de **dois clientes** (com e sem interface).
 * A comunicação via TCP.
 * A atualização da lista em tempo real.
-* As capturas do Wireshark e a análise dos pacotes.
+* A **obtenção e análise** dos pacotes no Wireshark, respondendo ao Quadro 1.
 
 ---
 
+## 📸 Telas da Aplicação
+
+<p align="center">
+  <strong>Servidor em Execução (Terminal)</strong><br>
+  <img src="img/servidor.py.png" alt="Servidor rodando" width="400">
+</p>
+
+<p align="center">
+  <strong>Cliente "sem interface" Conectado (Terminal)</strong><br>
+  <img src="img/cliente.py.png" alt="Cliente conectado" width="400">
+</p>
+
+<p align="center">
+  <strong>Cliente com Interface Gráfica (GUI)</strong>
+</p>
+<table align="center">
+  <tr>
+    <td align="center">
+      <i>Tela de Login</i><br>
+      <img src="img/login-GUI.png" alt="pagina login" width="400">
+    </td>
+    <td align="center">
+      <i>Lobby de Listas</i><br>
+      <img src="img/lobby-GUI.png" alt="lobby" width="400">
+    </td>
+    <td align="center">
+      <i>Lista Compartilhada</i><br>
+      <img src="img/lista-GUI.png" alt="lista" width="400">
+    </td>
+  </tr>
+</table>
+---
+
+## 👩‍💻 Autores
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <a href="https://github.com/Yasmimsousac">
+        <img src="img/yasmim.jpeg" width="150px;" alt="Foto da Yasmim"/>
+        <br />
+        <sub><b>Yasmim Sousa</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/DeveloperMateusS">
+        <img src="img/mateus.png" width="150px;" alt="Foto do Mateus"/>
+        <br />
+        <sub><b>Mateus Santos</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/Tarsila07">
+        <img src="img/tarsila.jpg" width="150px;" alt="Foto da Tarsila"/>
+        <br />
+        <sub><b>Tarsila Marques</b></sub>
+      </a>
+    </td>
+  </tr>
+</table>
+
 ## 🧾 Licença
+
 Este projeto foi desenvolvido exclusivamente para fins educacionais na disciplina Redes de Computadores – UnB.
 
