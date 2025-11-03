@@ -11,6 +11,7 @@ USERS_FILE = "users.json"
 LISTAS_FILE = "listas.json"
 lock = threading.Lock()
 
+#SEM IMPLEMENTAÇÃO GRAFICA
 
 def load_data(filepath):
     with lock:

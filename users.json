@@ -8,7 +8,20 @@
             "BO4Y",
             "S5QZ",
             "NBT6",
-            "AQ1R"
+            "AQ1R",
+            "MTTO"
+        ]
+    },
+    "toddy": {
+        "password": "123",
+        "listas_acessiveis": [
+            "R2OC"
+        ]
+    },
+    "italo": {
+        "password": "123",
+        "listas_acessiveis": [
+            "MTTO"
         ]
     }
 }

@@ -3,11 +3,15 @@
         "titulo": "tarefas",
         "tarefas": [
             {
-                "desc": "lasanha",
+                "desc": "tarsila adicionou: limpar quarto",
+                "done": false
+            },
+            {
+                "desc": "tarsila concluiu: lavar lou\u00e7a",
                 "done": true
             },
             {
-                "desc": "limpeza",
+                "desc": "italo adicionou: faxina",
                 "done": false
             }
         ]
@@ -81,5 +85,18 @@
     "AQ1R": {
         "titulo": "Tarefas",
         "tarefas": []
+    },
+    "R2OC": {
+        "titulo": "faxina",
+        "tarefas": []
+    },
+    "MTTO": {
+        "titulo": "Tarefas",
+        "tarefas": [
+            {
+                "desc": "limpar",
+                "done": true
+            }
+        ]
     }
 }
