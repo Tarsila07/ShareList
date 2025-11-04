@@ -112,7 +112,7 @@ python cliente_gui.py #Com Interface
 
 ## 🎥 Demonstração em Vídeo
 
-### 📺 [Confira o vídeo](https://COLOQUE-SEU-LINK-AQUI)
+### 📺 [Confira o vídeo](https://youtu.be/6wb25eIqKb0?si=DPRAI0Cf121pTxeG)
 
 * A **implementação** e o **funcionamento** do servidor.
 * A conexão de **dois clientes** (com e sem interface).
